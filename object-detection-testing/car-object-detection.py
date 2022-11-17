@@ -1,41 +1,58 @@
 # Testing openCV object detection on a video file with CVLib
+# https://www.cvlib.net/
+# YoloV4 is used for object detection
+# COCO dataset
 
-import numpy as np
-import sys, os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # Disable tensorflow debugging logs
-from fastapi import FastAPI, UploadFile, File
-from starlette.requests import Request
+
 import io
+import time
+import numpy as np
+import sys
+import os
 import cv2
 import cvlib as cv
 from cvlib.object_detection import draw_bbox
-from pydantic import BaseModel
-import pafy
+# from IPython.display import display
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Disable tensorflow debugging logs
 
+cap = cv2.VideoCapture(
+    'road-traffic-sample.mp4')
+# fps = int(cap.get(cv2.CAP_PROP_FPS))
+if not cap.isOpened():
+    print("Could not open video")
+    exit()
 
-URL = "https://www.youtube.com/watch?v=wqctLW0Hb_0&t=132s" 
-play = pafy.new(URL).streams[-1] #'-1' means read the lowest quality of video.
-assert play is not None 
-stream = cv2.VideoCapture(play.url) #create a opencv video stream.
+# used to record the time when we processed last frame
+prev_frame_time = 0
 
+# used to record the time at which we processed current frame
+new_frame_time = 0
 
-# app = FastAPI(__name__)
-# class ImageType(BaseModel):
-#  url: str
-# @app.get(“/”)
-# def home():
-#  return “Home”
-# @app.post(“/predict/”) 
-# def prediction(request: Request, 
-#  file: bytes = File(…)):
-# if request.method == “POST”:
-#     image_stream = io.BytesIO(file)
-#     image_stream.seek(0)
-#     file_bytes = np.asarray(bytearray(image_stream.read()), dtype=np.uint8)
-#     frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-#     bbox, label, conf = cv.detect_common_objects(frame)
-#     output_image = draw_bbox(frame, bbox, label, conf)
-#     num_cars = label.count(‘car’)
-#     print(‘Number of cars in the image is ‘+ str(num_cars))
-#     return {“num_cars”:num_cars}
-#  return “No post request found”
+while cap.isOpened():
+    status, frame = cap.read()
+
+    # Our operations on the frame come here
+    gray = frame
+
+    # resizing the frame size according to our need
+    gray = cv2.resize(gray, (500, 300))
+
+    # Calculating the fps
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    new_frame_time = time.time()
+    fps = 1/(new_frame_time-prev_frame_time)
+    prev_frame_time = new_frame_time
+    fps = int(fps)
+    fps = str(fps)
+    cv2.putText(gray, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
+
+    bbox, label, conf = cv.detect_common_objects(
+        gray, confidence=0.25, model='yolov4-tiny')    # YoloV4-tiny is used for object detection
+    # bbox, label, conf = cv.detect_common_objects(
+    #     frame, confidence=0.25)
+    print(bbox, label, conf)
+    out = draw_bbox(gray, bbox, label, conf)
+    cv2.imshow("Real-time object detection", out)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        cap.release()
+        break
