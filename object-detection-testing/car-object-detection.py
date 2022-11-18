@@ -32,10 +32,10 @@ while cap.isOpened():
     status, frame = cap.read()
 
     # Our operations on the frame come here
-    gray = frame
+    # gray = frame
 
-    # resizing the frame size according to our need
-    gray = cv2.resize(gray, (500, 300))
+    # # resizing the frame size according to our need
+    # gray = cv2.resize(gray, (500, 300))
 
     # Calculating the fps
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -44,14 +44,14 @@ while cap.isOpened():
     prev_frame_time = new_frame_time
     fps = int(fps)
     fps = str(fps)
-    cv2.putText(gray, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
+    cv2.putText(frame, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
 
-    bbox, label, conf = cv.detect_common_objects(
-        gray, confidence=0.25, model='yolov4-tiny')    # YoloV4-tiny is used for object detection
     # bbox, label, conf = cv.detect_common_objects(
-    #     frame, confidence=0.25)
+    #     gray, confidence=0.25, model='yolov4-tiny')    # YoloV4-tiny is used for object detection
+    bbox, label, conf = cv.detect_common_objects(
+        frame, confidence=0.25)
     print(bbox, label, conf)
-    out = draw_bbox(gray, bbox, label, conf)
+    out = draw_bbox(frame, bbox, label, conf)
     cv2.imshow("Real-time object detection", out)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         cap.release()
