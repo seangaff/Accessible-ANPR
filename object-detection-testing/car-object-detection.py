@@ -46,10 +46,10 @@ while cap.isOpened():
     fps = str(fps)
     cv2.putText(frame, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
 
-    # bbox, label, conf = cv.detect_common_objects(
-    #     gray, confidence=0.25, model='yolov4-tiny')    # YoloV4-tiny is used for object detection
     bbox, label, conf = cv.detect_common_objects(
-        frame, confidence=0.25)
+        frame, confidence=0.25, model='yolov4-tiny')    # YoloV4-tiny is used for object detection
+    # bbox, label, conf = cv.detect_common_objects(
+    #     frame, confidence=0.25)
     print(bbox, label, conf)
     out = draw_bbox(frame, bbox, label, conf)
     cv2.imshow("Real-time object detection", out)
