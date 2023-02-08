@@ -69,4 +69,7 @@ def video_feed():
 
 # Run the Flask web server
 if __name__ == '__main__':
+    # Run Locally
     app.run(port=8000, debug=True)
+    # Run on droplet
+    app.run(host="143.198.167.150", port=8000, debug=True)
