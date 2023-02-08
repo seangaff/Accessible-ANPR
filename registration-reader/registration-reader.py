@@ -106,7 +106,7 @@ def overwrite_plates_data(i, detections: list, plates_data: list, plate_lenght=N
 
 
 def gen():
-    videoPath = 'PlateTestVideo.mp4'
+    videoPath = 'CloseupVideo.mp4'
     cap = cv2.VideoCapture(
         videoPath)
 
