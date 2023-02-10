@@ -3,8 +3,6 @@ import time
 import os
 import numpy as np
 import cv2
-import cvlib as cv
-from cvlib.object_detection import draw_bbox
 from flask import Flask, render_template, Response
 import torch
 import easyocr
@@ -31,7 +29,7 @@ def get_plates_xy(frame: np.ndarray, labels: list, row: list, width: int, height
     # , paragraph="True", min_size=50)
     ocr_result = reader.readtext(np.asarray(
         plate_crop), allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ')
-
+    # print(ocr_result)
     return ocr_result, x1, y1
 
 
@@ -106,7 +104,7 @@ def overwrite_plates_data(i, detections: list, plates_data: list, plate_lenght=N
 
 
 def gen():
-    videoPath = 'CloseupVideo.mp4'
+    videoPath = 'videos/CloseupMini.mp4'
     cap = cv2.VideoCapture(
         videoPath)
 
@@ -117,6 +115,12 @@ def gen():
     plates_data = [['None', [0, 0], 0] for n in range(5)]
     count_empty_labels = [0]*5
 
+    # used to record the time when we processed last frame
+    prev_frame_time = 0
+
+    # used to record the time at which we processed current frame
+    new_frame_time = 0
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -124,6 +128,7 @@ def gen():
             continue
         assert not isinstance(frame, type(None)), 'frame not found'
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # frame = cv2.resize(frame, (640, 640))
         results = model(frame)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
@@ -168,6 +173,13 @@ def gen():
         # Convert the frame to JPEG format
         out = cv2.imencode('.jpg', frame)[1].tobytes()
 
+        new_frame_time = time.time()
+        fps = 1/(new_frame_time-prev_frame_time)
+        prev_frame_time = new_frame_time
+        fps = int(fps)
+        fps = str(fps)
+        print("FPS: " + fps)
+
         # Yield the frame to the Flask site
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + out + b'\r\n')
 
@@ -180,6 +192,6 @@ def video_feed():
 # Run the Flask web server
 if __name__ == '__main__':
     model = torch.hub.load('ultralytics/yolov5', 'custom',
-                           path='best.pt', force_reload=True)
-    reader = easyocr.Reader(['en'])
+                           path='models/bestv2.onnx', force_reload=True)
+    reader = easyocr.Reader(['en'], gpu=False)
     app.run(port=8000, debug=True)

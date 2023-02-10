@@ -10,3 +10,7 @@ The project will include the selection of hardware and ML model as well as the d
 ## Object-detection-Testing
 
 Experimenting with object detection and taking input from various sources. Using Python, OpenCV and YoloV4-Tiny. Testing reading from a webcam,and video file. Testing on Apple M1 chip and Raspberry Pi 4.
+
+## Registration-Reader
+
+Testing performance of varations of ANPR(Automatic Number Plate Recognition). Models trained in Google Colab using Yolov5 and Pytorch. Sucessfully trained models to detect and read registration plates. Testing multiple model types on multiple input videos. Inference speed testing on Apple M1 chip and Raspberry Pi 4.
