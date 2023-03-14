@@ -6,6 +6,7 @@ import cv2
 from flask import Flask, render_template, Response
 import torch
 import easyocr
+import argparse
 
 # Initialize the Flask web server
 app = Flask(__name__)
@@ -106,7 +107,7 @@ def overwrite_plates_data(i, detections: list, plates_data: list, plate_lenght=N
 def gen():
     videoPath = 'videos/CloseupMini.mp4'
     cap = cv2.VideoCapture(
-        videoPath)
+        "http://192.168.0.122:81")
 
     if not cap.isOpened():
         print("Could not open video")
@@ -127,7 +128,7 @@ def gen():
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             continue
         assert not isinstance(frame, type(None)), 'frame not found'
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         # frame = cv2.resize(frame, (640, 640))
         results = model(frame)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
@@ -191,6 +192,21 @@ def video_feed():
 
 # Run the Flask web server
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Example script that takes command line arguments')
+
+    parser.add_argument('--arg1', type=str, default='default_value',
+                        help='Description of argument 1')
+    parser.add_argument('--arg2', type=int, default=42,
+                        help='Description of argument 2')
+
+    # Parse the arguments
+    args = parser.parse_args()
+
+    # Set the global variables based on the command line arguments
+    global_var1 = args.arg1
+    global_var2 = args.arg2
+
     model = torch.hub.load('ultralytics/yolov5', 'custom',
                            path='models/bestv2.onnx', force_reload=True)
     reader = easyocr.Reader(['en'], gpu=False)

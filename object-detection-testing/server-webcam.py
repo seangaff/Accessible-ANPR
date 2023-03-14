@@ -20,7 +20,7 @@ def index():
 
 def gen():
     # Open the webcam using OpenCV
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture("http://192.168.0.122:81")
 
     # Keep looping indefinitely
     while True:
