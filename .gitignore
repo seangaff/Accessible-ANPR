@@ -8,3 +8,6 @@ __pycache__/
 dist/
 build/
 *.egg
+
+# Large Files
+registration-reader/videos/IrelandCompliation.mp4
