@@ -4,9 +4,11 @@ import os
 import numpy as np
 import cv2
 from flask import Flask, render_template, Response
+from flask import jsonify
 import torch
 import easyocr
 import argparse
+import matplotlib.pyplot as plt
 
 # Initialize the Flask web server
 app = Flask(__name__)
@@ -106,80 +108,146 @@ def overwrite_plates_data(i, detections: list, plates_data: list, plate_lenght=N
 
 def gen():
     videoPath = 'videos/CloseupMini.mp4'
-    cap = cv2.VideoCapture(
-        "http://192.168.0.122:81")
+    cap = cv2.VideoCapture(videoPath)
+    # cap = cv2.VideoCapture(
+    #     "http://192.168.0.122:81")
 
     if not cap.isOpened():
         print("Could not open video")
         exit()
 
+    fps_list = []
+
+    # Setting detection zone
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    middle_box_width = 800
+    middle_box_height = 100
+    middle_box_x1 = int(frame_width/2 - middle_box_width/2)
+    middle_box_y1 = int(frame_height/2 - middle_box_height/2) + 100
+    middle_box_x2 = middle_box_x1 + middle_box_width
+    middle_box_y2 = middle_box_y1 + middle_box_height
+
     plates_data = [['None', [0, 0], 0] for n in range(5)]
     count_empty_labels = [0]*5
 
-    # used to record the time when we processed last frame
+    input_frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
+    time_to_wait = 1.0 / input_frame_rate
     prev_frame_time = 0
-
-    # used to record the time at which we processed current frame
     new_frame_time = 0
+    fps_pos = (int(frame_width - 150), 30)
+
+    # Init 2 frames for threshold
+    ret, frame = cap.read()
+    ret, frame2 = cap.read()
+
+    recent_plates = [''] * 5
 
     while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            continue
-        assert not isinstance(frame, type(None)), 'frame not found'
-        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        # frame = cv2.resize(frame, (640, 640))
-        results = model(frame)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        start_time = time.time()
+        # ret, frame = cap.read()
 
-        labels, coordinates = results.xyxyn[0][:, -1], results.xyxyn[0][:, :-1]
-        width, height = frame.shape[1], frame.shape[0]
+        diff = cv2.absdiff(frame, frame2)
+        gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, thresh = cv2.threshold(blur, 20, 255, cv2.THRESH_BINARY)
+        dilated = cv2.dilate(thresh, None, iterations=3)
+        contours, _ = cv2.findContours(
+            dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        detections = [['None', [0, 0], 0] for n in range(5)]
-        i = 0
+        motion_detected = False
+        for contour in contours:
+            (x, y, w, h) = cv2.boundingRect(contour)
 
-        # Read all detected plates per each frame and save them to >>detections<<
-        while i < len(labels):
-            row = coordinates[i]
-            # 3. Crop detections and pass them to the easyOCR
-            ocr_result, x1, y1 = get_plates_xy(
-                frame, labels, row, width, height, reader)
+            if cv2.contourArea(contour) < 900:
+                continue
 
-            # 4. Get reading for the each frame
-            detections = detect_text(
-                i, row, x1, y1, ocr_result, detections, 0.5)
-            i += 1
-        i = 0
+            if x >= middle_box_x1 and x+w <= middle_box_x2 and y >= middle_box_y1 and y+h <= middle_box_y2:
+                motion_detected = True
 
-        # 5. Do some tracking and data managing for better results
-        # If we get multiple detections in one frame easyOCR mixes them every few frames, so here we make sure that they are saved according to the \
-        # detections' coordinates. Then we delete data about plates that dissapeared for more than >>frames_to_reset<< frames. And finally we overwrite \
-        # the predictions (regarding to the probability of easyOCR detections - if new predcition has less p% than the previous one, we skip it.)
+        if motion_detected:
+            results = model(frame)
+            # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-        # Sort detections
-        detections = sort_detections(detections, plates_data)
+            labels, coordinates = results.xyxyn[0][:, -
+                                                   1], results.xyxyn[0][:, :-1]
 
-        # Delete data about plates that dissapeared from frame
-        plates_data, count_empty_labels = delete_old_labels(
-            detections, count_empty_labels, plates_data, 3)
+            detections = [['None', [0, 0], 0] for n in range(5)]
+            i = 0
 
-        # Overwrite data and print text predictions over the boxes
-        while i < len(labels):
-            plates_data = overwrite_plates_data(i, detections, plates_data, 7)
-            cv2.putText(frame, f"{plates_data[i][0]}", (plates_data[i][1]),
-                        cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
-            i += 1
+            # Read all detected plates per each frame and save them to >>detections<<
+            while i < len(labels):
+                row = coordinates[i]
+                # 3. Crop detections and pass them to the easyOCR
+                ocr_result, x1, y1 = get_plates_xy(
+                    frame, labels, row, frame_width, frame_height, reader)
 
-        # Convert the frame to JPEG format
-        out = cv2.imencode('.jpg', frame)[1].tobytes()
+                # 4. Get reading for the each frame
+                detections = detect_text(
+                    i, row, x1, y1, ocr_result, detections, 0.5)
+                i += 1
+            i = 0
+
+            # 5. Do some tracking and data managing for better results
+            # If we get multiple detections in one frame easyOCR mixes them every few frames, so here we make sure that they are saved according to the \
+            # detections' coordinates. Then we delete data about plates that dissapeared for more than >>frames_to_reset<< frames. And finally we overwrite \
+            # the predictions (regarding to the probability of easyOCR detections - if new predcition has less p% than the previous one, we skip it.)
+
+            # Sort detections
+            detections = sort_detections(detections, plates_data)
+
+            # Delete data about plates that dissapeared from frame
+            plates_data, count_empty_labels = delete_old_labels(
+                detections, count_empty_labels, plates_data, 3)
+
+            # Overwrite data and print text predictions over the boxes
+            while i < len(labels):
+                plates_data = overwrite_plates_data(
+                    i, detections, plates_data, 7)
+                if plates_data[i][0] not in recent_plates and plates_data[i][0] != 'None':
+                    recent_plates.pop(0)
+                    recent_plates.append(plates_data[i][0])
+                cv2.putText(frame, f"{plates_data[i][0]}", (plates_data[i][1]),
+                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+                i += 1
+            cv2.rectangle(frame, (middle_box_x1, middle_box_y1),
+                          (middle_box_x2, middle_box_y2), (0, 255, 0), 2)
+            cv2.putText(frame, "Status: {}".format('Movement Detected'), (10, 20), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 0, 255), 3)
+
+        else:
+            cv2.rectangle(frame, (middle_box_x1, middle_box_y1),
+                          (middle_box_x2, middle_box_y2), (0, 0, 255), 2)
+            cv2.putText(frame, "Status: {}".format('No Movement'), (10, 20), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 0, 255), 3)
+
+        for i, plate in enumerate(recent_plates):
+            cv2.putText(frame, plate, (10, frame_height - 30 * (5 - i)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         new_frame_time = time.time()
         fps = 1/(new_frame_time-prev_frame_time)
         prev_frame_time = new_frame_time
         fps = int(fps)
+        fps_list.append(fps)
         fps = str(fps)
+        cv2.putText(frame, "FPS: {}".format(fps), fps_pos, cv2.FONT_HERSHEY_SIMPLEX,
+                    1, (0, 255, 0), 2, cv2.LINE_AA)
         print("FPS: " + fps)
+
+        out = cv2.imencode('.jpg', frame)[1].tobytes()
+
+        frame = frame2
+        ret, frame2 = cap.read()
+        if not ret:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = cap.read()
+            ret, frame2 = cap.read()
+        assert not isinstance(frame, type(None)), 'frame not found'
+
+        processing_time = time.time() - start_time
+        adjusted_wait_time = max(time_to_wait - processing_time, 0)
+        time.sleep(adjusted_wait_time)
 
         # Yield the frame to the Flask site
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + out + b'\r\n')
