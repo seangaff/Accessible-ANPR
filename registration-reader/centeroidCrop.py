@@ -1,12 +1,39 @@
 import cv2
-import torch
+import onnxruntime as ort
 import numpy as np
 import tensorflow as tf
-from PIL import Image
+# from PIL import Image
+import cv2
+
+
+def preprocess_image(image, target_size):
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_resized = cv2.resize(image_rgb, target_size)
+    image_normalized = image_resized.astype(np.float32) / 255.0
+    image_transposed = np.transpose(
+        image_normalized, (2, 0, 1))  # Change to NCHW format
+    image_expanded = np.expand_dims(image_transposed, axis=0)
+    return image_expanded.astype(np.float16)
+
+
+def draw_bounding_boxes(image, boxes, box_format, confidence_threshold=0.5):
+    for box in boxes:
+        if box_format == "xywh":
+            x, y, w, h, confidence, class_id = box
+            x1, y1 = int(x - w / 2), int(y - h / 2)
+            x2, y2 = int(x + w / 2), int(y + h / 2)
+        elif box_format == "xyxy":
+            x1, y1, x2, y2, confidence, class_id = box
+        else:
+            raise ValueError(f"Unsupported box format: {box_format}")
+
+        if confidence > confidence_threshold:
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            print(f"Box: {x1}, {y1}, {x2}, {y2}, {confidence}, {class_id}")
 
 
 def main():
-    video_path = "videos/CloseupMini.mp4"
+    video_path = "videos/Closeupv2.mp4"
     cap = cv2.VideoCapture(video_path)
 
     # Check if video opened successfully
@@ -14,15 +41,26 @@ def main():
         print("Error opening video file")
         return
 
+    # Load the ONNX model
+    onnx_model_path = 'models/bestv2-half.onnx'
+
+    # Create an ONNX runtime session
+    ort_session = ort.InferenceSession(onnx_model_path)
+    input_dims = ort_session.get_inputs()[0].shape
+    target_size = (input_dims[3], input_dims[2])
+    input_name = ort_session.get_inputs()[0].name
+    output_name = ort_session.get_outputs()[0].name
+    print(f"Model input dimensions: {input_dims}")
+
     # Create a MOG2 background subtractor
     bg_subtractor = cv2.createBackgroundSubtractorMOG2(
         history=500, varThreshold=100, detectShadows=False)
 
     crop_size = 640
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-    out = cv2.VideoWriter('filtered_video.mp4', fourcc,
-                          25.0, (crop_size, crop_size))
+    # out = cv2.VideoWriter('filtered_video.mp4', fourcc,
+    #                       25.0, (crop_size, crop_size))
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -83,12 +121,19 @@ def main():
                 frame = frame[top_left_y:bottom_right_y,
                               top_left_x:bottom_right_x]
                 frame = cv2.resize(frame, (crop_size, crop_size))
-                # image = np.expand_dims(frame, axis=1).astype(np.float16)
-                # result = model(image)
-                # image = frame.astype(np.float16)
-                # result = model(image)
-                # print(image.shape)
-        out.write(frame)
+
+                # Run the ONNX model
+                preprocessed_image = preprocess_image(
+                    frame, target_size)
+
+                boxes = ort_session.run(
+                    [output_name], {input_name: preprocessed_image})[0]
+                print(f"Boxes shape: {boxes.shape}, Boxes content: {boxes}")
+
+                box_format = "xywh"  # Change this to "xyxy" if your model outputs boxes in that format
+                draw_bounding_boxes(frame, boxes[0], box_format)
+
+        # out.write(frame)
         cv2.imshow("Processed Video", frame)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -99,6 +144,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # model = torch.hub.load('ultralytics/yolov5', 'custom',
-    #                        path='models/bestv2-half.onnx', force_reload=True)
     main()
