@@ -8,18 +8,49 @@ import time
 
 
 def ocr_on_bounding_box(image):
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # text = pytesseract.image_to_string(image)
-    ocr_result = reader.readtext(np.asarray(
-        cropped_image), allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ')
-    if ocr_result:
-        text = ocr_result[0][1]
-        print(f"Detected Text: {text}")
+    text = pytesseract.image_to_string(image)
+    # ocr_result = reader.readtext(np.asarray(
+    #     cropped_image), allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    # if ocr_result:
+    #     text = ocr_result[0][1]
+    print(f"Detected Text: {text}")
 
 
-# Load the YOLOv8 model
+def preprocess_text(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Threshold the image
+    thresh = cv2.threshold(
+        gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+
+    # Perform morphological operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    thresh = cv2.erode(thresh, kernel, iterations=1)
+    thresh = cv2.dilate(thresh, kernel, iterations=1)
+
+    # Apply image smoothing
+    thresh = cv2.medianBlur(thresh, 3)
+
+    # Improve the image contrast
+    thresh = cv2.equalizeHist(thresh)
+
+    # Deskew the image
+    coords = cv2.findNonZero(thresh)
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+    (h, w) = thresh.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    thresh = cv2.warpAffine(
+        thresh, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return thresh
+
+    # Load the YOLOv8 model
 model = YOLO('models/best8v3e10.onnx')
-reader = easyocr.Reader(['en'], gpu=False)
+# reader = easyocr.Reader(['en'], gpu=False)
 
 # Open the video file
 video_path = "videos/Closeupv2.mp4"
@@ -41,7 +72,6 @@ fps_pos = (0, 30)
 while cap.isOpened():
     # Read a frame from the video
     success, frame = cap.read()
-    # frame = cv2.resize(frame, (640, 640))
 
     if success:
         start_time = time.time()
@@ -111,9 +141,6 @@ while cap.isOpened():
 
             # Create a new thread for each detected object, translate the bounding box, and run OCR on the original image
             for box in boxes:
-                # Translate the bounding box coordinates to the original image
-                # Multiply by 2 since we downsized the image by 0.5
-                # box.xyxy = [coord * 2 for coord in box.xyxy]
                 coords = box.xyxy.numpy()
                 coords = coords[0]
                 coords = [int(coord) * 2 for coord in coords]
@@ -123,28 +150,15 @@ while cap.isOpened():
                 # print(coords)
                 cropped_image = frame[coords[1]:coords[3], coords[0]:coords[2]]
                 # print(cropped_image.shape)
-                cropped_image = cv2.cvtColor(
-                    cropped_image, cv2.COLOR_BGR2GRAY)
-                # # text = pytesseract.image_to_string(cropped_image)
-                # ocr_result = reader.readtext(np.asarray(
-                #     cropped_image), allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ')
-                # if ocr_result:
-                #     text = ocr_result[0][1]
-                #     annotated_frame = cv2.putText(
-                #         annotated_frame, text, (coords[0], coords[1]),
-                #         cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+                cropped_image = preprocess_text(cropped_image)
                 thread = threading.Thread(
                     target=ocr_on_bounding_box, args=(cropped_image,))
                 thread.start()
 
-                # Visualize the results on the original frame
-                # annotated_frame = results[0].plot(img=frame)
-
                 # Display the annotated frame
                 if cropped_image.shape[0] > 0 and cropped_image.shape[1] > 0:
 
-                    cv2.imshow("YOLOv8 Inference", annotated_frame)
-                # cv2.imshow("YOLOv8 Inference", cropped_image)
+                    cv2.imshow("YOLOv8 Inference", cropped_image)
 
         # Break the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord("q"):

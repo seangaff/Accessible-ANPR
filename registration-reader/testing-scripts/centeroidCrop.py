@@ -4,6 +4,9 @@ import numpy as np
 import tensorflow as tf
 # from PIL import Image
 import cv2
+import time
+import torch
+from ultralytics import YOLO
 
 
 def preprocess_image(image, target_size):
@@ -13,7 +16,8 @@ def preprocess_image(image, target_size):
     image_transposed = np.transpose(
         image_normalized, (2, 0, 1))  # Change to NCHW format
     image_expanded = np.expand_dims(image_transposed, axis=0)
-    return image_expanded.astype(np.float16)
+    # return image_expanded.astype(np.float16)
+    return image_expanded
 
 
 def draw_bounding_boxes(image, boxes, box_format, confidence_threshold=0.5):
@@ -29,7 +33,7 @@ def draw_bounding_boxes(image, boxes, box_format, confidence_threshold=0.5):
 
         if confidence > confidence_threshold:
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            print(f"Box: {x1}, {y1}, {x2}, {y2}, {confidence}, {class_id}")
+            # print(f"Box: {x1}, {y1}, {x2}, {y2}, {confidence}, {class_id}")
 
 
 def main():
@@ -42,10 +46,14 @@ def main():
         return
 
     # Load the ONNX model
-    onnx_model_path = 'models/bestv2-half.onnx'
+    onnx_model_path = 'models/best8v2e10.onnx'
+    full_model = 'models/bestv2.onnx'
+    # model = torch.hub.load('ultralytics/yolov8', 'custom',
+    #                        path='models/best8v1e6.pt', force_reload=True)
+    model = YOLO('models/best8v2e10.pt')  # load a custom model
 
     # Create an ONNX runtime session
-    ort_session = ort.InferenceSession(onnx_model_path)
+    ort_session = ort.InferenceSession(full_model)
     input_dims = ort_session.get_inputs()[0].shape
     target_size = (input_dims[3], input_dims[2])
     input_name = ort_session.get_inputs()[0].name
@@ -59,8 +67,11 @@ def main():
     crop_size = 640
     # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
-    # out = cv2.VideoWriter('filtered_video.mp4', fourcc,
+    # out = cv2.VideoWriter('onnx-half.mp4', fourcc,
     #                       25.0, (crop_size, crop_size))
+
+    prev_frame_time = 0
+    new_frame_time = 0
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -122,16 +133,23 @@ def main():
                               top_left_x:bottom_right_x]
                 frame = cv2.resize(frame, (crop_size, crop_size))
 
-                # Run the ONNX model
-                preprocessed_image = preprocess_image(
-                    frame, target_size)
+                # # Run the ONNX model
+                # preprocessed_image = preprocess_image(
+                #     frame, target_size)
+                result = model(frame)
 
-                boxes = ort_session.run(
-                    [output_name], {input_name: preprocessed_image})[0]
-                print(f"Boxes shape: {boxes.shape}, Boxes content: {boxes}")
+                # boxes = ort_session.run(
+                #     [output_name], {input_name: preprocessed_image})[0]
+                # print(f"Boxes shape: {boxes.shape}, Boxes content: {boxes}")
 
-                box_format = "xywh"  # Change this to "xyxy" if your model outputs boxes in that format
-                draw_bounding_boxes(frame, boxes[0], box_format)
+                # box_format = "xywh"  # Change this to "xyxy" if your model outputs boxes in that format
+                # draw_bounding_boxes(frame, boxes[0], box_format)
+
+        new_frame_time = time.time()
+        fps = 1/(new_frame_time-prev_frame_time)
+        prev_frame_time = new_frame_time
+        fps = int(fps)
+        print(f"FPS: {fps}")
 
         # out.write(frame)
         cv2.imshow("Processed Video", frame)
