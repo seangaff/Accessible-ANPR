@@ -7,6 +7,7 @@ from flask import Flask, render_template, Response
 from flask import jsonify
 import matplotlib.pyplot as plt
 import pytesseract
+from pytesseract import Output
 import threading
 
 
@@ -16,7 +17,8 @@ app = Flask(__name__)
 
 def ocr_on_bounding_box(image):
     preprocess_text(image)
-    text = pytesseract.image_to_string(image)
+    text = pytesseract.image_to_string(
+        image, config=custom_config)
     print(f"Detected Text: {text}")
     return text
 
@@ -53,7 +55,8 @@ def index():
 
 def gen():
     model = YOLO('models/best8v3e10.onnx')  # load a custom model
-    videoPath = 'videos/NightTestMini.mp4'
+    videoPath = 'videos/Closeupv2.mp4'
+
     cap = cv2.VideoCapture(videoPath)
 
     if not cap.isOpened():
@@ -177,7 +180,8 @@ def gen():
 
                     # annotated_frame = cv2.rectangle(frame, (coords[0], coords[1]), (
                     # coords[2], coords[3]), (0, 255, 0), 2)
-                    plate_image = frame[coords[1]                                        :coords[3], coords[0]:coords[2]]
+                    plate_image = frame[coords[1]
+                        :coords[3], coords[0]:coords[2]]
                     # plate_image = cv2.cvtColor(
                     #     plate_image, cv2.COLOR_BGR2GRAY)
                     thread = threading.Thread(
@@ -226,7 +230,7 @@ def gen():
     plt.xlabel('Time')
     plt.ylabel('FPS')
     # save the figure
-    plt.savefig('MacFPS-NightVideo.png')
+    plt.savefig('PiFPS-DayVideo.png')
 
 
 @ app.route('/video_feed')
@@ -236,4 +240,6 @@ def video_feed():
 
 # Run the Flask web server
 if __name__ == '__main__':
+    whitelist = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '
+    custom_config = r'--psm 6 -c tessedit_char_whitelist={}'.format(whitelist)
     app.run(port=8000, debug=True)
