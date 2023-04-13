@@ -15,9 +15,34 @@ app = Flask(__name__)
 
 
 def ocr_on_bounding_box(image):
+    preprocess_text(image)
     text = pytesseract.image_to_string(image)
-    # return text
     print(f"Detected Text: {text}")
+    return text
+
+
+def preprocess_text(img):
+    h, w = img.shape[:2]
+    # crop left 1/8 - removes false characters from left side
+    img = img[:, w//8:]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Threshold the image
+    thresh = cv2.threshold(
+        gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
+
+    # Perform morphological operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    thresh = cv2.erode(thresh, kernel, iterations=1)
+    thresh = cv2.dilate(thresh, kernel, iterations=1)
+
+    # Apply image smoothing
+    thresh = cv2.medianBlur(thresh, 3)
+
+    # Improve the image contrast
+    thresh = cv2.equalizeHist(thresh)
+
+    return thresh
 
 
 @app.route('/')
@@ -28,7 +53,7 @@ def index():
 
 def gen():
     model = YOLO('models/best8v3e10.onnx')  # load a custom model
-    videoPath = 'videos/Closeupv2.mp4'
+    videoPath = 'videos/NightTestMini.mp4'
     cap = cv2.VideoCapture(videoPath)
 
     if not cap.isOpened():
@@ -61,6 +86,12 @@ def gen():
     ret, frame = cap.read()
     ret, frame2 = cap.read()
     height, width, channels = frame.shape
+
+    # plot fps
+    time_list = []
+    fps_list = []
+    total_frames = 0
+    first_time = time.time()
 
     while cap.isOpened():
         start_time = time.time()
@@ -132,7 +163,8 @@ def gen():
                 downsized_frame = cv2.resize(frame, (320, 320))
 
                 # Run YOLOv8 inference on the downsized (320, 320) frame
-                results = model.predict(downsized_frame, imgsz=320)
+                results = model.predict(
+                    downsized_frame, imgsz=320, verbose=False)
 
                 # Get the bounding boxes
                 boxes = results[0].boxes
@@ -145,10 +177,9 @@ def gen():
 
                     # annotated_frame = cv2.rectangle(frame, (coords[0], coords[1]), (
                     # coords[2], coords[3]), (0, 255, 0), 2)
-                    plate_image = frame[coords[1]
-                        :coords[3], coords[0]:coords[2]]
-                    plate_image = cv2.cvtColor(
-                        plate_image, cv2.COLOR_BGR2GRAY)
+                    plate_image = frame[coords[1]                                        :coords[3], coords[0]:coords[2]]
+                    # plate_image = cv2.cvtColor(
+                    #     plate_image, cv2.COLOR_BGR2GRAY)
                     thread = threading.Thread(
                         target=ocr_on_bounding_box, args=(plate_image,))
                     thread.start()
@@ -169,26 +200,33 @@ def gen():
         fps = int(fps)
         fps_list.append(fps)
         fps = str(fps)
+        time_list.append(new_frame_time-first_time)
         cv2.putText(annotated_frame, "FPS: {}".format(fps), fps_pos, cv2.FONT_HERSHEY_SIMPLEX,
                     1, (0, 255, 0), 2, cv2.LINE_AA)
         # print("FPS: " + fps)
+        processing_time = time.time() - start_time
+        # adjusted_wait_time = max(time_to_wait - processing_time, 0)
+        # time.sleep(adjusted_wait_time)
 
         out = cv2.imencode('.jpg', annotated_frame)[1].tobytes()
 
         frame = frame2
         ret, frame2 = cap.read()
         if not ret:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            ret, frame = cap.read()
-            ret, frame2 = cap.read()
-        assert not isinstance(frame, type(None)), 'frame not found'
-
-        processing_time = time.time() - start_time
-        adjusted_wait_time = max(time_to_wait - processing_time, 0)
-        time.sleep(adjusted_wait_time)
+            break
+        #     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        #     ret, frame = cap.read()
+        #     ret, frame2 = cap.read()
+        # assert not isinstance(frame, type(None)), 'frame not found'
 
         # Yield the frame to the Flask site
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + out + b'\r\n')
+    plt.figure()
+    plt.plot(time_list, fps_list)
+    plt.xlabel('Time')
+    plt.ylabel('FPS')
+    # save the figure
+    plt.savefig('MacFPS-NightVideo.png')
 
 
 @ app.route('/video_feed')
