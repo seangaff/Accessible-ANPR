@@ -1,16 +1,31 @@
-# TinyML-Registration-Reader
+# Automatic Number Plate Recognition on Edge Devices using Deep Learning Techniques
 
 ## Project Description
 
 Final Year Project.
-TinyML is a sub-field of Machine Learning where inference is performed on low power microcontroller based embedded systems.
-This project is to develop a product which can detect, read and transmit information from car registration plates using low power, low cost hardware.
-The project will include the selection of hardware and ML model as well as the development of a prototype and the analysis of the performance of the prototype against a range of benchmarks.
+Developing a system to detect cars, capture license plates, read and record text in real time on accessible hardware, testing on Raspberry Pi 4B.
+Utilizing OpenCV, PyTorch, Flaks, and custom YOLOv5 and YOLOv8 models trained in Google Colab.
 
-## Object-detection-Testing
+## Project Setup
 
-Experimenting with object detection and taking input from various sources. Using Python, OpenCV and YoloV4-Tiny. Testing reading from a webcam,and video file. Testing on Apple M1 chip and Raspberry Pi 4.
+1. Clone the repository
 
-## Registration-Reader
+2. Install Python if not already installed
 
-Testing performance of varations of ANPR(Automatic Number Plate Recognition). Models trained in Google Colab using Yolov5 and Pytorch. Sucessfully trained models to detect and read registration plates. Testing multiple model types on multiple input videos. Inference speed testing on Apple M1 chip and Raspberry Pi 4.
+Version 3.10.10 was used for this project.
+
+3. Install Requirements
+
+```bash
+cd registration-reader && pip install -r requirements.txt
+```
+
+4. Run the Project
+
+```bash
+python reg-reader-v2.py
+```
+
+5. Open the Web App
+
+Navigate to the the webapp. The default port is 8000. The full URL will be displayed in the terminal.
