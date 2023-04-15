@@ -4,7 +4,7 @@
 
 Final Year Project.
 Developing a system to detect cars, capture license plates, read and record text in real time on accessible hardware, testing on Raspberry Pi 4B.
-Utilizing OpenCV, PyTorch, Flaks, and custom YOLOv5 and YOLOv8 models trained in Google Colab.
+Utilizing OpenCV, PyTorch, Flask, and custom YOLOv5 and YOLOv8 models trained in Google Colab.
 
 ## Project Setup
 
