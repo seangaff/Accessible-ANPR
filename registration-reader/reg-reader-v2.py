@@ -47,6 +47,29 @@ def preprocess_text(img):
     return thresh
 
 
+def detect_in_frame(frame, model):
+    downsized_frame = frame.copy()
+    downsized_frame = cv2.resize(downsized_frame, (320, 320))
+    downsized_frame = cv2.cvtColor(downsized_frame, cv2.COLOR_BGR2RGB)
+    results = model.predict(
+        downsized_frame, imgsz=320, verbose=False)
+
+    # Get the bounding boxes
+    boxes = results[0].boxes
+    # Create a new thread for each detected object, translate the bounding box, and run OCR on the original image
+    for box in boxes:
+        coords = box.xyxy.numpy()
+        coords = coords[0]
+        coords = [int(coord) * 2 for coord in coords]
+
+        # annotated_frame = cv2.rectangle(frame, (coords[0], coords[1]), (
+        # coords[2], coords[3]), (0, 255, 0), 2)
+        plate_image = frame[coords[1]:coords[3], coords[0]:coords[2]]
+
+        # print(plate_image.shape)
+        text = ocr_on_bounding_box(plate_image)
+
+
 @app.route('/')
 def index():
     # return 'hellow world'
@@ -162,31 +185,31 @@ def gen():
                               top_left_x:bottom_right_x]
                 # frame = cv2.resize(frame, (crop_size, crop_size))
 
-                # Make a copy of the original frame that is downsized to (320, 320)
-                downsized_frame = cv2.resize(frame, (320, 320))
-
                 # Run YOLOv8 inference on the downsized (320, 320) frame
-                results = model.predict(
-                    downsized_frame, imgsz=320, verbose=False)
 
-                # Get the bounding boxes
-                boxes = results[0].boxes
+                thread = threading.Thread(
+                    target=detect_in_frame, args=(frame, model))
+                thread.start()
+                # results = model.predict(
+                #     downsized_frame, imgsz=320, verbose=False)
 
-                # Create a new thread for each detected object, translate the bounding box, and run OCR on the original image
-                for box in boxes:
-                    coords = box.xyxy.numpy()
-                    coords = coords[0]
-                    coords = [int(coord) * 2 for coord in coords]
+                # # Get the bounding boxes
+                # boxes = results[0].boxes
 
-                    # annotated_frame = cv2.rectangle(frame, (coords[0], coords[1]), (
-                    # coords[2], coords[3]), (0, 255, 0), 2)
-                    plate_image = frame[coords[1]
-                        :coords[3], coords[0]:coords[2]]
-                    # plate_image = cv2.cvtColor(
-                    #     plate_image, cv2.COLOR_BGR2GRAY)
-                    thread = threading.Thread(
-                        target=ocr_on_bounding_box, args=(plate_image,))
-                    thread.start()
+                # # Create a new thread for each detected object, translate the bounding box, and run OCR on the original image
+                # for box in boxes:
+                #     coords = box.xyxy.numpy()
+                #     coords = coords[0]
+                #     coords = [int(coord) * 2 for coord in coords]
+
+                #     # annotated_frame = cv2.rectangle(frame, (coords[0], coords[1]), (
+                #     # coords[2], coords[3]), (0, 255, 0), 2)
+                #     plate_image = frame[coords[1]:coords[3], coords[0]:coords[2]]
+                #     # plate_image = cv2.cvtColor(
+                #     #     plate_image, cv2.COLOR_BGR2GRAY)
+                #     thread = threading.Thread(
+                #         target=ocr_on_bounding_box, args=(plate_image,))
+                #     thread.start()
 
         else:
             cv2.rectangle(annotated_frame, (middle_box_x1, middle_box_y1),
